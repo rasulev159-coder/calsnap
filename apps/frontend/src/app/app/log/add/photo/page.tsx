@@ -17,7 +17,8 @@ export default function PhotoAddPage() {
   const [preview, setPreview] = useState<string | null>(null);
   const [results, setResults] = useState<FoodAnalysisResult[] | null>(null);
   const [mealType, setMealType] = useState<MealType>('lunch');
-  const [portionScale, setPortionScale] = useState(1);
+  // portionG per item — initialized from AI response
+  const [portionOverrides, setPortionOverrides] = useState<Record<number, number>>({});
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -25,21 +26,32 @@ export default function PhotoAddPage() {
 
     setPreview(URL.createObjectURL(file));
     setResults(null);
+    setPortionOverrides({});
 
     const data = await analyzeMutation.mutateAsync(file);
     setResults(data.items);
   };
 
-  const handleAdd = async (item: FoodAnalysisResult) => {
+  const getPortionG = (item: FoodAnalysisResult, idx: number) => {
+    return portionOverrides[idx] ?? item.portionG;
+  };
+
+  const getScale = (item: FoodAnalysisResult, idx: number) => {
+    if (item.portionG <= 0) return 1;
+    return getPortionG(item, idx) / item.portionG;
+  };
+
+  const handleAdd = async (item: FoodAnalysisResult, idx: number) => {
+    const scale = getScale(item, idx);
     await addMutation.mutateAsync({
       date: today(),
       mealType,
       foodName: item.dishName,
-      calories: Math.round(item.calories * portionScale),
-      proteinG: Math.round(item.proteinG * portionScale),
-      fatG: Math.round(item.fatG * portionScale),
-      carbsG: Math.round(item.carbsG * portionScale),
-      portionG: Math.round(item.portionG * portionScale),
+      calories: Math.round(item.calories * scale),
+      proteinG: Math.round(item.proteinG * scale),
+      fatG: Math.round(item.fatG * scale),
+      carbsG: Math.round(item.carbsG * scale),
+      portionG: getPortionG(item, idx),
       source: 'photo',
     });
     router.push('/app/today');
@@ -86,6 +98,7 @@ export default function PhotoAddPage() {
             onClick={() => {
               setPreview(null);
               setResults(null);
+              setPortionOverrides({});
             }}
             className="mt-2 text-sm text-gray-400 hover:text-gray-600"
           >
@@ -122,68 +135,81 @@ export default function PhotoAddPage() {
             ))}
           </div>
 
-          {/* Portion slider */}
-          <div className="rounded-xl bg-white p-4 shadow-sm border border-gray-100">
-            <label className="flex justify-between text-sm mb-2">
-              <span>Размер порции</span>
-              <span className="font-medium">{Math.round(portionScale * 100)}%</span>
-            </label>
-            <input
-              type="range"
-              min="0.5"
-              max="2"
-              step="0.1"
-              value={portionScale}
-              onChange={(e) => setPortionScale(+e.target.value)}
-              className="w-full accent-primary"
-            />
-          </div>
+          {results.map((item, i) => {
+            const portionG = getPortionG(item, i);
+            const scale = getScale(item, i);
 
-          {results.map((item, i) => (
-            <div
-              key={i}
-              className="rounded-2xl bg-white p-5 shadow-sm border border-gray-100"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="font-semibold">{item.dishName}</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    Уверенность: {Math.round(item.confidence * 100)}%
-                  </p>
-                </div>
-                <span className="text-lg font-bold text-primary">
-                  {Math.round(item.calories * portionScale)} ккал
-                </span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 text-center mb-4">
-                <div className="rounded-lg bg-blue-50 py-2">
-                  <div className="text-xs text-blue-600">Белки</div>
-                  <div className="font-semibold text-sm">{Math.round(item.proteinG * portionScale)}г</div>
-                </div>
-                <div className="rounded-lg bg-amber-50 py-2">
-                  <div className="text-xs text-amber-600">Жиры</div>
-                  <div className="font-semibold text-sm">{Math.round(item.fatG * portionScale)}г</div>
-                </div>
-                <div className="rounded-lg bg-green-50 py-2">
-                  <div className="text-xs text-green-600">Углеводы</div>
-                  <div className="font-semibold text-sm">{Math.round(item.carbsG * portionScale)}г</div>
-                </div>
-              </div>
-
-              {item.notes && (
-                <p className="text-xs text-gray-400 mb-3">{item.notes}</p>
-              )}
-
-              <button
-                onClick={() => handleAdd(item)}
-                disabled={addMutation.isPending}
-                className="w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-white hover:bg-primary-dark transition disabled:opacity-50"
+            return (
+              <div
+                key={i}
+                className="rounded-2xl bg-white p-5 shadow-sm border border-gray-100"
               >
-                {addMutation.isPending ? 'Добавление...' : 'Добавить в дневник'}
-              </button>
-            </div>
-          ))}
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h3 className="font-semibold">{item.dishName}</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Уверенность: {Math.round(item.confidence * 100)}%
+                    </p>
+                  </div>
+                  <span className="text-lg font-bold text-primary">
+                    {Math.round(item.calories * scale)} ккал
+                  </span>
+                </div>
+
+                {/* Portion slider in grams */}
+                {item.portionG > 0 && (
+                  <div className="mb-4">
+                    <label className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-500">Порция</span>
+                      <span className="font-semibold">{portionG} г</span>
+                    </label>
+                    <input
+                      type="range"
+                      min={Math.round(item.portionG * 0.25)}
+                      max={Math.round(item.portionG * 3)}
+                      step={10}
+                      value={portionG}
+                      onChange={(e) =>
+                        setPortionOverrides((prev) => ({ ...prev, [i]: +e.target.value }))
+                      }
+                      className="w-full accent-primary"
+                    />
+                    <div className="flex justify-between text-xs text-gray-300 mt-0.5">
+                      <span>{Math.round(item.portionG * 0.25)}г</span>
+                      <span>{Math.round(item.portionG * 3)}г</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-3 gap-3 text-center mb-4">
+                  <div className="rounded-lg bg-blue-50 py-2">
+                    <div className="text-xs text-blue-600">Белки</div>
+                    <div className="font-semibold text-sm">{Math.round(item.proteinG * scale)}г</div>
+                  </div>
+                  <div className="rounded-lg bg-amber-50 py-2">
+                    <div className="text-xs text-amber-600">Жиры</div>
+                    <div className="font-semibold text-sm">{Math.round(item.fatG * scale)}г</div>
+                  </div>
+                  <div className="rounded-lg bg-green-50 py-2">
+                    <div className="text-xs text-green-600">Углеводы</div>
+                    <div className="font-semibold text-sm">{Math.round(item.carbsG * scale)}г</div>
+                  </div>
+                </div>
+
+                {item.notes && (
+                  <p className="text-xs text-gray-400 mb-3">{item.notes}</p>
+                )}
+
+                <button
+                  onClick={() => handleAdd(item, i)}
+                  disabled={addMutation.isPending}
+                  className="w-full rounded-lg bg-primary py-2.5 text-sm font-semibold text-white hover:bg-primary-dark transition disabled:opacity-50"
+                >
+                  {addMutation.isPending ? 'Добавление...' : 'Добавить в дневник'}
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
