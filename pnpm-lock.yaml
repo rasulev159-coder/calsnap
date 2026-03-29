@@ -108,6 +108,9 @@ importers:
       '@calsnap/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@react-oauth/google':
+        specifier: ^0.13.4
+        version: 0.13.4(react-dom@18.3.1)(react@18.3.1)
       '@tanstack/react-query':
         specifier: ^5.17.0
         version: 5.95.2(react@18.3.1)
@@ -727,6 +730,16 @@ packages:
     resolution: {integrity: sha512-pHhpQdr1UPFpt+zFfnPazhulaZYCUqeIcPpJViYoq9R+D/yw4fjE+CtnsnKzPYm0ddUbeXUzjGVGIRVgPDCk4Q==}
     dependencies:
       '@prisma/debug': 5.22.0
+
+  /@react-oauth/google@0.13.4(react-dom@18.3.1)(react@18.3.1):
+    resolution: {integrity: sha512-hGKyNEH+/PK8M0sFEuo3MAEk0txtHpgs94tDQit+s2LXg7b6z53NtzHfqDvoB2X8O6lGB+FRg80hY//X6hfD+w==}
+    peerDependencies:
+      react: '>=16.8.0'
+      react-dom: '>=16.8.0'
+    dependencies:
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+    dev: false
 
   /@rtsao/scc@1.1.0:
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}

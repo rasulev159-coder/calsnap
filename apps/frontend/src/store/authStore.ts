@@ -13,6 +13,7 @@ interface AuthState {
 
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
+  loginGoogle: (credential: string) => Promise<void>;
   logout: () => Promise<void>;
   fetchMe: () => Promise<void>;
   setUser: (user: UserProfile) => void;
@@ -42,6 +43,17 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
         try {
           const res = await api.post('/auth/login', { email, password });
+          const { user, tokens } = res.data.data;
+          set({ user, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      loginGoogle: async (credential) => {
+        set({ isLoading: true });
+        try {
+          const res = await api.post('/auth/google', { credential });
           const { user, tokens } = res.data.data;
           set({ user, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken });
         } finally {

@@ -1,7 +1,10 @@
 import { Router, Request, Response } from 'express';
+import { OAuth2Client } from 'google-auth-library';
 import { prisma } from '../lib/prisma';
 import { hashPassword, comparePassword, generateTokens, verifyRefresh } from '../lib/auth';
 import { registerSchema, loginSchema } from '@calsnap/shared';
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const router = Router();
 
@@ -84,6 +87,70 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: err.errors[0]?.message || 'Ошибка валидации' });
     }
     throw err;
+  }
+});
+
+// POST /api/auth/google
+router.post('/google', async (req: Request, res: Response) => {
+  const { credential } = req.body;
+  if (!credential) {
+    return res.status(400).json({ success: false, error: 'Google credential отсутствует' });
+  }
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    const payload = ticket.getPayload();
+    if (!payload?.email) {
+      return res.status(400).json({ success: false, error: 'Невалидный Google токен' });
+    }
+
+    const { email, name, sub: googleId } = payload;
+
+    // Find or create user
+    let user = await prisma.user.findFirst({
+      where: { OR: [{ googleId }, { email }] },
+    });
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: { email, name: name || email.split('@')[0], googleId },
+      });
+    } else if (!user.googleId) {
+      // Link Google to existing email account
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { googleId },
+      });
+    }
+
+    const tokens = generateTokens({ userId: user.id, email: user.email });
+    res.cookie('refreshToken', tokens.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        user: {
+          id: user.id, email: user.email, name: user.name,
+          gender: user.gender, age: user.age, heightCm: user.heightCm,
+          currentWeightKg: user.currentWeightKg, targetWeightKg: user.targetWeightKg,
+          activityLevel: user.activityLevel, goal: user.goal,
+          dietaryPreferences: user.dietaryPreferences, allergies: user.allergies,
+          onboardingCompleted: user.onboardingCompleted,
+          createdAt: user.createdAt, updatedAt: user.updatedAt,
+        },
+        tokens,
+      },
+    });
+  } catch (err: any) {
+    return res.status(401).json({ success: false, error: 'Ошибка Google авторизации: ' + err.message });
   }
 });
 
