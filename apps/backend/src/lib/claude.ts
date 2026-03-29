@@ -28,7 +28,7 @@ export async function analyzePhotoWithClaude(
 }
 
 async function analyzeWithGemini(imageBase64: string, mimeType: string): Promise<string> {
-  const model = gemini!.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = gemini!.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
   const result = await model.generateContent([
     {
@@ -89,7 +89,7 @@ export async function generateMenuWithClaude(
   const prompt = `Норма: ${calories} ккал, Б:${protein}г Ж:${fat}г У:${carbs}г. Цель: ${goal}. ${preferences.length ? 'Предпочтения: ' + preferences.join(', ') + '.' : ''} ${allergies ? 'Аллергии: ' + allergies + '.' : ''}\n\nСоставь меню на день: завтрак, обед, ужин, 1 перекус. ТОЛЬКО JSON: { "meals": [{ "meal_type": "breakfast|lunch|dinner|snack", "food_name": "...", "calories": N, "protein_g": N, "fat_g": N, "carbs_g": N, "recipe": "2-3 шага" }] }`;
 
   if (gemini) {
-    const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent(prompt);
     return result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   }
@@ -124,7 +124,7 @@ export async function chatWithClaude(
   const prompt = `Контекст: ${userContext}\n\nВопрос пользователя: ${message}`;
 
   if (gemini) {
-    const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent(`Ты персональный диетолог-помощник. Отвечай кратко на русском.\n\n${prompt}`);
     return result.response.text();
   }
@@ -149,7 +149,7 @@ export async function generateWeeklyReportWithClaude(
   const prompt = `${userContext}\n\nСоставь еженедельный отчёт. ТОЛЬКО JSON: { "summary": "...", "positives": ["..."], "improvements": ["..."], "tip": "..." }`;
 
   if (gemini) {
-    const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent(`Ты диетолог.\n\n${prompt}`);
     return result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   }
@@ -176,7 +176,7 @@ export async function generateWorkoutPlanWithClaude(
   const prompt = `Цель: ${goal}. Активность: ${activityLevel}.\n\nСоставь план тренировок на 3 дня. ТОЛЬКО JSON: { "plan": [{ "day": "...", "exercises": [{ "name": "...", "sets": N, "reps": N, "kcal_burn": N }] }] }`;
 
   if (gemini) {
-    const model = gemini.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = gemini.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent(`Ты фитнес-тренер.\n\n${prompt}`);
     return result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   }
