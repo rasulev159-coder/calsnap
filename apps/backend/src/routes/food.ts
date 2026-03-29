@@ -28,7 +28,20 @@ router.post('/analyze-photo', requireAuth, upload.single('photo'), async (req: R
     const base64 = req.file.buffer.toString('base64');
     const mimeType = req.file.mimetype;
     const result = await analyzePhotoWithClaude(base64, mimeType);
-    const parsed = JSON.parse(result);
+    console.log('AI raw response:', result.substring(0, 500));
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(result);
+    } catch {
+      // Try to extract JSON from text
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('Could not parse AI response as JSON');
+      }
+    }
 
     // Normalize response format
     const items = parsed.items || [parsed];
@@ -45,6 +58,7 @@ router.post('/analyze-photo', requireAuth, upload.single('photo'), async (req: R
 
     return res.json({ success: true, data: { items: normalized } });
   } catch (err: any) {
+    console.error('Photo analysis error:', err.message || err);
     // Fallback to demo if API fails (no credits, rate limit, etc.)
     return res.json({
       success: true,
