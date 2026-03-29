@@ -45,7 +45,22 @@ router.post('/analyze-photo', requireAuth, upload.single('photo'), async (req: R
 
     return res.json({ success: true, data: { items: normalized } });
   } catch (err: any) {
-    return res.status(500).json({ success: false, error: 'Ошибка анализа фото: ' + err.message });
+    // Fallback to demo if API fails (no credits, rate limit, etc.)
+    return res.json({
+      success: true,
+      data: {
+        items: [{
+          dishName: 'Не удалось распознать',
+          confidence: 0,
+          portionG: 0,
+          calories: 0,
+          proteinG: 0,
+          fatG: 0,
+          carbsG: 0,
+          notes: 'ИИ-анализ временно недоступен. Добавьте блюдо вручную.',
+        }],
+      },
+    });
   }
 });
 
