@@ -56,8 +56,8 @@ export default function RegisterPage() {
               onError={() => setError('Ошибка Google авторизации')}
               text="signup_with"
               shape="rectangular"
-              width="100%"
-              locale="ru"
+              width={350}
+
             />
           </div>
 
