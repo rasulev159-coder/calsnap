@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { requireAuth } from '../middleware/requireAuth';
-import { analyzePhotoWithClaude } from '../lib/claude';
+import { analyzePhotoWithClaude, MOCK_MODE } from '../lib/claude';
+import { FOODS_DATABASE, type FoodItem } from '../data/foods';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -48,6 +49,130 @@ router.post('/analyze-photo', requireAuth, upload.single('photo'), async (req: R
   }
 });
 
+/**
+ * Synonym/keyword map for common food categories.
+ * Allows "суп" to match soups, "мясо" to match meat dishes, etc.
+ */
+const SYNONYMS: Record<string, string[]> = {
+  суп: ['борщ', 'щи', 'солянка', 'уха', 'рассольник', 'окрошка', 'шурпа', 'мастава', 'том ям', 'рамен'],
+  мясо: ['говядина', 'свинина', 'баранина', 'телятина', 'кролик', 'утка', 'куриная', 'куриное', 'куриные', 'индейка'],
+  рыба: ['лосось', 'сёмга', 'форель', 'тунец', 'треска', 'минтай', 'скумбрия', 'сельдь'],
+  каша: ['овсянка', 'гречка', 'перловка', 'пшено', 'булгур', 'киноа', 'манная', 'рисовая'],
+  выпечка: ['самса', 'сомса', 'блины', 'оладьи', 'круассан', 'лепёшка', 'лаваш', 'пахлава'],
+  напиток: ['чай', 'кофе', 'сок', 'компот', 'кола', 'айран', 'капучино', 'латте', 'молоко', 'кефир'],
+  сладкое: ['шоколад', 'мороженое', 'торт', 'печенье', 'зефир', 'халва', 'мёд', 'варенье', 'пахлава'],
+  фрукт: ['яблоко', 'банан', 'апельсин', 'груша', 'виноград', 'арбуз', 'персик', 'манго', 'киви', 'ананас', 'клубника'],
+  овощ: ['помидор', 'огурец', 'морковь', 'капуста', 'брокколи', 'перец', 'свёкла', 'баклажан', 'кабачок', 'тыква', 'шпинат'],
+  орех: ['грецкие', 'миндаль', 'фундук', 'кешью', 'арахис'],
+  фастфуд: ['бургер', 'пицца', 'хот-дог', 'шаурма', 'наггетсы', 'картофель фри', 'чипсы'],
+  завтрак: ['овсянка', 'омлет', 'яичница', 'тост', 'мюсли', 'гранола', 'блины', 'сырники', 'каша'],
+};
+
+/**
+ * Get word stems (prefixes of 3+ chars) for fuzzy matching.
+ * Handles Russian morphology simply: "куриная" → "кур", "курин"
+ */
+function getStems(word: string): string[] {
+  if (word.length < 3) return []; // skip short words like "с", "в", "на"
+  if (word.length <= 3) return [word]; // 3-char words used as-is, no shorter stems
+  const stems: string[] = [word];
+  // Add prefixes from 4 chars up to full word (skip 3-char stems to avoid noise)
+  for (let i = 4; i < word.length; i++) {
+    stems.push(word.slice(0, i));
+  }
+  return stems;
+}
+
+/**
+ * Smart search with fuzzy matching, stem matching, and scoring.
+ */
+function searchFoods(query: string, limit = 20): FoodItem[] {
+  const q = query.toLowerCase().trim();
+  if (!q) return [];
+
+  const words = q.split(/\s+/).filter(Boolean);
+  const queryStems = words.flatMap(getStems);
+
+  // Expand synonyms: "суп" → also search for "борщ", "щи", etc.
+  const synonymMatches = new Set<string>();
+  for (const word of words) {
+    const syns = SYNONYMS[word];
+    if (syns) {
+      syns.forEach((s) => synonymMatches.add(s));
+    }
+    // Also check if query is a key by stem
+    for (const [key, syns] of Object.entries(SYNONYMS)) {
+      if (key.startsWith(word) || word.startsWith(key)) {
+        syns.forEach((s) => synonymMatches.add(s));
+      }
+    }
+  }
+
+  const scored = FOODS_DATABASE.map((food) => {
+    const name = food.name.toLowerCase();
+    const nameWords = name.split(/[\s(),/]+/).filter(Boolean);
+    let score = 0;
+
+    // Exact full match
+    if (name === q) score += 100;
+
+    // Name starts with query
+    if (name.startsWith(q)) score += 50;
+
+    // Name includes full query
+    if (name.includes(q)) score += 30;
+
+    // Each word direct match (skip short prepositions)
+    for (const word of words) {
+      if (word.length >= 3 && name.includes(word)) score += 15;
+    }
+
+    // Stem matching: "кур" matches "куриная", "курица" etc.
+    for (const stem of queryStems) {
+      if (stem.length >= 3) {
+        for (const nw of nameWords) {
+          if (nw.startsWith(stem)) {
+            score += Math.max(Math.min(stem.length, 8), 5); // min 5 per stem match
+          }
+        }
+      }
+    }
+
+    // Reverse stem: search within food name words against query
+    for (const nw of nameWords) {
+      if (nw.length < 3) continue;
+      for (const word of words) {
+        if (word.length < 3) continue;
+        if (nw.startsWith(word) || word.startsWith(nw)) {
+          score += 5;
+        }
+      }
+    }
+
+    // Synonym match: "суп" → matches "борщ", "шурпа", etc.
+    // Match against whole words only to avoid "уха" matching "сухари"
+    if (synonymMatches.size > 0) {
+      for (const syn of synonymMatches) {
+        for (const nw of nameWords) {
+          if (nw === syn || nw.startsWith(syn) && syn.length >= 4) {
+            score += 20;
+            break;
+          }
+        }
+      }
+    }
+
+    return { food, score };
+  });
+
+  const minScore = 5;
+  return scored
+    .filter((s) => s.score >= minScore)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((s) => s.food);
+}
+
 // POST /api/food/search
 router.post('/search', requireAuth, async (req: Request, res: Response) => {
   const { query } = req.body;
@@ -55,29 +180,20 @@ router.post('/search', requireAuth, async (req: Request, res: Response) => {
     return res.status(400).json({ success: false, error: 'Введите поисковый запрос' });
   }
 
-  // Simple local food database (expandable)
-  const foods = [
-    { name: 'Куриная грудка (100г)', calories: 165, proteinG: 31, fatG: 3.6, carbsG: 0, portionG: 100 },
-    { name: 'Рис белый (100г)', calories: 130, proteinG: 2.7, fatG: 0.3, carbsG: 28, portionG: 100 },
-    { name: 'Гречка (100г)', calories: 110, proteinG: 4.2, fatG: 1.1, carbsG: 21, portionG: 100 },
-    { name: 'Яйцо куриное (1 шт)', calories: 155, proteinG: 13, fatG: 11, carbsG: 1.1, portionG: 50 },
-    { name: 'Банан (1 шт)', calories: 89, proteinG: 1.1, fatG: 0.3, carbsG: 23, portionG: 120 },
-    { name: 'Овсянка (100г)', calories: 68, proteinG: 2.4, fatG: 1.4, carbsG: 12, portionG: 100 },
-    { name: 'Творог 5% (100г)', calories: 121, proteinG: 17, fatG: 5, carbsG: 1.8, portionG: 100 },
-    { name: 'Лосось (100г)', calories: 208, proteinG: 20, fatG: 13, carbsG: 0, portionG: 100 },
-    { name: 'Хлеб чёрный (1 кусок)', calories: 65, proteinG: 2.1, fatG: 0.3, carbsG: 13, portionG: 30 },
-    { name: 'Молоко 2.5% (200мл)', calories: 104, proteinG: 5.6, fatG: 5, carbsG: 9.4, portionG: 200 },
-    { name: 'Плов с бараниной (100г)', calories: 150, proteinG: 6, fatG: 5.8, carbsG: 18, portionG: 100 },
-    { name: 'Шурпа (100г)', calories: 45, proteinG: 3.5, fatG: 2.5, carbsG: 2.8, portionG: 100 },
-    { name: 'Самса с мясом (1 шт)', calories: 280, proteinG: 10, fatG: 14, carbsG: 28, portionG: 120 },
-    { name: 'Лагман (100г)', calories: 85, proteinG: 4.5, fatG: 3, carbsG: 10, portionG: 100 },
-    { name: 'Манты (1 шт)', calories: 180, proteinG: 8, fatG: 9, carbsG: 16, portionG: 80 },
-  ];
+  const results = searchFoods(query);
 
-  const q = query.toLowerCase();
-  const results = foods.filter((f) => f.name.toLowerCase().includes(q));
+  // Format response
+  const formatted = results.map((f) => ({
+    name: f.name,
+    calories: f.calories,
+    proteinG: f.proteinG,
+    fatG: f.fatG,
+    carbsG: f.carbsG,
+    portionG: f.portionG,
+    category: f.category,
+  }));
 
-  return res.json({ success: true, data: results });
+  return res.json({ success: true, data: formatted });
 });
 
 export default router;

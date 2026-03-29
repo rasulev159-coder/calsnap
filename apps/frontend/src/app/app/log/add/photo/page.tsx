@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAnalyzePhoto, useAddFoodLog } from '@/hooks/useApi';
 import { today } from '@/lib/utils';
 import { MEAL_TYPES, MEAL_TYPE_LABELS, type MealType } from '@calsnap/shared';
@@ -47,7 +48,7 @@ export default function PhotoAddPage() {
   return (
     <div className="mx-auto max-w-lg px-4 pt-6">
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.back()} className="text-lg">&larr;</button>
+        <Link href="/app/today" className="text-lg">&larr;</Link>
         <h1 className="text-xl font-bold">Фото-анализ</h1>
       </div>
 
