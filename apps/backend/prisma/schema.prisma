@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String   @id @default(uuid())
+  email                String   @unique
+  passwordHash         String?
+  googleId             String?  @unique
+  name                 String
+  gender               String?
+  age                  Int?
+  heightCm             Float?
+  currentWeightKg      Float?
+  targetWeightKg       Float?
+  activityLevel        String?
+  goal                 String?
+  dietaryPreferences   String[] @default([])
+  allergies            String   @default("")
+  onboardingCompleted  Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  dailyNorms  DailyNorm[]
+  foodLogs    FoodLog[]
+  weightLogs  WeightLog[]
+  menuPlans   MenuPlan[]
+  workoutPlans WorkoutPlan[]
+}
+
+model DailyNorm {
+  id           String   @id @default(uuid())
+  userId       String
+  calories     Int
+  proteinG     Int
+  fatG         Int
+  carbsG       Int
+  validFrom    DateTime @default(now())
+  calculatedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model FoodLog {
+  id        String   @id @default(uuid())
+  userId    String
+  date      String   // YYYY-MM-DD
+  mealType  String   // breakfast | lunch | dinner | snack
+  foodName  String
+  calories  Int
+  proteinG  Float
+  fatG      Float
+  carbsG    Float
+  portionG  Float
+  source    String   // photo | menu | manual
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+}
+
+model WeightLog {
+  id       String   @id @default(uuid())
+  userId   String
+  weightKg Float
+  loggedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model MenuPlan {
+  id          String   @id @default(uuid())
+  userId      String
+  date        String   // YYYY-MM-DD
+  meals       Json     // MenuMeal[]
+  generatedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+}
+
+model WorkoutPlan {
+  id          String   @id @default(uuid())
+  userId      String
+  weekStart   String   // YYYY-MM-DD (Monday)
+  plan        Json     // WorkoutDay[]
+  generatedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, weekStart])
+}
