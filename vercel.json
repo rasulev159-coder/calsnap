@@ -1,12 +1,6 @@
 {
-  "framework": "nextjs",
+  "buildCommand": "cd apps/frontend && npx next build",
   "installCommand": "npm install -g pnpm@8 && pnpm install",
-  "buildCommand": "cd apps/frontend && pnpm run build",
-  "outputDirectory": "apps/frontend/.next",
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "${NEXT_PUBLIC_API_URL}/api/:path*"
-    }
-  ]
+  "framework": "nextjs",
+  "outputDirectory": "apps/frontend/.next"
 }
