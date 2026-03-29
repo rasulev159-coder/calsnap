@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { GoogleLogin } from '@react-oauth/google';
+import GoogleButton from '@/components/GoogleButton';
 import { useAuthStore } from '@/store/authStore';
 
 export default function RegisterPage() {
@@ -29,7 +29,6 @@ export default function RegisterPage() {
     setError('');
     try {
       await loginGoogle(credential);
-      // Google auth auto-creates user; check if onboarding needed
       router.push('/app/today');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Ошибка регистрации через Google');
@@ -49,17 +48,7 @@ export default function RegisterPage() {
             <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</div>
           )}
 
-          {/* Google Sign-In */}
-          <div className="flex justify-center mb-4">
-            <GoogleLogin
-              onSuccess={(res) => res.credential && handleGoogle(res.credential)}
-              onError={() => setError('Ошибка Google авторизации')}
-              text="signup_with"
-              shape="rectangular"
-              width={350}
-
-            />
-          </div>
+          <GoogleButton onSuccess={handleGoogle} text="signup_with" />
 
           <div className="relative my-5">
             <div className="absolute inset-0 flex items-center">
