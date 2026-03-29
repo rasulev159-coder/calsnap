@@ -25,4 +25,5 @@ RUN cd apps/backend && npx prisma generate
 WORKDIR /app/apps/backend
 
 # Railway sets PORT dynamically
-CMD ["npx", "tsx", "src/index.ts"]
+# Run prisma db push at startup then start server
+CMD ["sh", "-c", "npx prisma db push --skip-generate && npx tsx src/index.ts"]
