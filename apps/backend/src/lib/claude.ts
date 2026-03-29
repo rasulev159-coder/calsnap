@@ -1,171 +1,167 @@
-/**
- * Claude API wrapper.
- * Currently returns mock data — replace with real Anthropic SDK when API key is available.
- *
- * To enable real Claude:
- * 1. pnpm add @anthropic-ai/sdk (in backend)
- * 2. Set ANTHROPIC_API_KEY in .env
- * 3. Uncomment the real implementation below
- */
+import Anthropic from '@anthropic-ai/sdk';
 
-// import Anthropic from '@anthropic-ai/sdk';
-// const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = process.env.ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  : null;
 
-export const MOCK_MODE = !process.env.ANTHROPIC_API_KEY;
+export const MOCK_MODE = !client;
 
 export async function analyzePhotoWithClaude(
-  _imageBase64: string,
-  _mimeType: string,
+  imageBase64: string,
+  mimeType: string,
 ): Promise<string> {
-  if (MOCK_MODE) {
+  if (!client) {
     return JSON.stringify({
       items: [
         {
-          dish_name: 'Плов с бараниной',
-          confidence: 0.88,
-          portion_g: 300,
-          calories: 420,
-          protein_g: 18,
-          fat_g: 16,
-          carbs_g: 52,
-          notes: 'Оценка по стандартной порции узбекского плова',
+          dish_name: 'Демо-режим: блюдо не распознано',
+          confidence: 0,
+          portion_g: 0,
+          calories: 0,
+          protein_g: 0,
+          fat_g: 0,
+          carbs_g: 0,
+          notes: 'Подключите ANTHROPIC_API_KEY для реального распознавания фото',
         },
       ],
     });
   }
 
-  // Real implementation:
-  // const response = await client.messages.create({
-  //   model: 'claude-sonnet-4-20250514',
-  //   max_tokens: 1024,
-  //   messages: [{
-  //     role: 'user',
-  //     content: [
-  //       { type: 'image', source: { type: 'base64', media_type: mimeType, data: imageBase64 } },
-  //       { type: 'text', text: 'Определи блюдо(а) на фото и рассчитай КБЖУ. Если блюд несколько — верни массив. Верни ТОЛЬКО JSON: { "items": [{ "dish_name": "...", "confidence": 0.0-1.0, "portion_g": N, "calories": N, "protein_g": N, "fat_g": N, "carbs_g": N, "notes": "..." }] }' }
-  //     ]
-  //   }],
-  //   system: 'Ты диетолог и эксперт по питанию. Анализируй изображения еды и возвращай ТОЛЬКО JSON без markdown.',
-  // });
-  // return response.content[0].type === 'text' ? response.content[0].text : '';
-  return '';
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 1024,
+    system: 'Ты диетолог и эксперт по питанию. Анализируй изображения еды и возвращай ТОЛЬКО JSON без markdown. Если на фото не еда — верни JSON с dish_name: "Это не еда" и нулевыми значениями КБЖУ.',
+    messages: [{
+      role: 'user',
+      content: [
+        {
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+            data: imageBase64,
+          },
+        },
+        {
+          type: 'text',
+          text: 'Определи что на фото. Если это еда — рассчитай КБЖУ. Если на фото несколько блюд — верни массив. Если это НЕ еда — укажи что это не еда. Верни ТОЛЬКО JSON: { "items": [{ "dish_name": "...", "confidence": 0.0-1.0, "portion_g": N, "calories": N, "protein_g": N, "fat_g": N, "carbs_g": N, "notes": "..." }] }',
+        },
+      ],
+    }],
+  });
+
+  const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+
+  // Clean potential markdown wrapping
+  const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  return cleaned;
 }
 
 export async function generateMenuWithClaude(
-  _calories: number,
-  _protein: number,
-  _fat: number,
-  _carbs: number,
-  _goal: string,
-  _preferences: string[],
-  _allergies: string,
+  calories: number,
+  protein: number,
+  fat: number,
+  carbs: number,
+  goal: string,
+  preferences: string[],
+  allergies: string,
 ): Promise<string> {
-  if (MOCK_MODE) {
+  if (!client) {
     return JSON.stringify({
       meals: [
-        {
-          meal_type: 'breakfast',
-          food_name: 'Овсянка с бананом и орехами',
-          calories: 380,
-          protein_g: 12,
-          fat_g: 14,
-          carbs_g: 52,
-          recipe: '1. Залить 60г овсянки кипятком. 2. Добавить нарезанный банан и 15г грецких орехов. 3. Посыпать корицей.',
-        },
-        {
-          meal_type: 'lunch',
-          food_name: 'Куриная грудка с гречкой и овощами',
-          calories: 520,
-          protein_g: 42,
-          fat_g: 12,
-          carbs_g: 58,
-          recipe: '1. Запечь 150г куриной грудки с травами. 2. Отварить 80г гречки. 3. Подать с салатом из свежих овощей.',
-        },
-        {
-          meal_type: 'dinner',
-          food_name: 'Лосось с рисом и брокколи',
-          calories: 480,
-          protein_g: 35,
-          fat_g: 18,
-          carbs_g: 42,
-          recipe: '1. Запечь 150г лосося в фольге с лимоном. 2. Отварить 70г риса. 3. Приготовить брокколи на пару.',
-        },
-        {
-          meal_type: 'snack',
-          food_name: 'Греческий йогурт с ягодами',
-          calories: 180,
-          protein_g: 15,
-          fat_g: 6,
-          carbs_g: 18,
-          recipe: '1. Выложить 200г греческого йогурта. 2. Добавить горсть свежих ягод. 3. Полить чайной ложкой мёда.',
-        },
+        { meal_type: 'breakfast', food_name: 'Овсянка с бананом и орехами', calories: Math.round(calories * 0.25), protein_g: Math.round(protein * 0.2), fat_g: Math.round(fat * 0.2), carbs_g: Math.round(carbs * 0.3), recipe: 'Залить 60г овсянки кипятком, добавить банан и орехи.' },
+        { meal_type: 'lunch', food_name: 'Куриная грудка с гречкой', calories: Math.round(calories * 0.35), protein_g: Math.round(protein * 0.4), fat_g: Math.round(fat * 0.25), carbs_g: Math.round(carbs * 0.3), recipe: 'Запечь 150г грудки, отварить 80г гречки, подать с салатом.' },
+        { meal_type: 'dinner', food_name: 'Рыба с рисом и овощами', calories: Math.round(calories * 0.3), protein_g: Math.round(protein * 0.3), fat_g: Math.round(fat * 0.35), carbs_g: Math.round(carbs * 0.3), recipe: 'Запечь 150г рыбы, отварить 70г риса, овощи на пару.' },
+        { meal_type: 'snack', food_name: 'Йогурт с ягодами', calories: Math.round(calories * 0.1), protein_g: Math.round(protein * 0.1), fat_g: Math.round(fat * 0.2), carbs_g: Math.round(carbs * 0.1), recipe: 'Греческий йогурт 200г с горстью свежих ягод.' },
       ],
     });
   }
 
-  return '';
+  const prefsStr = preferences.length ? `Предпочтения: ${preferences.join(', ')}.` : '';
+  const allergyStr = allergies ? `Аллергии: ${allergies}.` : '';
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 2048,
+    system: 'Ты персональный диетолог. Составь план питания на день. Возвращай ТОЛЬКО JSON без markdown.',
+    messages: [{
+      role: 'user',
+      content: `Параметры: ${calories} ккал, Б:${protein}г Ж:${fat}г У:${carbs}г. Цель: ${goal}. ${prefsStr} ${allergyStr}\n\nСоставь меню: завтрак, обед, ужин, 1 перекус. Формат JSON: { "meals": [{ "meal_type": "breakfast|lunch|dinner|snack", "food_name": "...", "calories": N, "protein_g": N, "fat_g": N, "carbs_g": N, "recipe": "2-3 шага" }] }`,
+    }],
+  });
+
+  const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+  return text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 }
 
 export async function chatWithClaude(
-  _message: string,
-  _userContext: string,
+  message: string,
+  userContext: string,
 ): Promise<string> {
-  if (MOCK_MODE) {
-    return 'Я ваш ИИ-помощник по питанию. Сейчас я работаю в демо-режиме. Подключите API ключ Anthropic для полноценной работы.';
+  if (!client) {
+    return 'Я ваш ИИ-помощник по питанию. Сейчас я работаю в демо-режиме. Подключите ANTHROPIC_API_KEY для полноценной работы.';
   }
 
-  return '';
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 1024,
+    system: `Ты персональный диетолог-помощник. Контекст пользователя: ${userContext}. Отвечай кратко и по делу на русском.`,
+    messages: [{ role: 'user', content: message }],
+  });
+
+  return response.content[0].type === 'text' ? response.content[0].text : '';
 }
 
 export async function generateWeeklyReportWithClaude(
-  _userContext: string,
+  userContext: string,
 ): Promise<string> {
-  if (MOCK_MODE) {
+  if (!client) {
     return JSON.stringify({
-      summary: 'За эту неделю вы хорошо соблюдали план питания.',
-      positives: ['Стабильное потребление белка', 'Регулярные приёмы пищи'],
-      improvements: ['Увеличить потребление овощей', 'Пить больше воды'],
-      tip: 'Попробуйте добавить больше клетчатки — она помогает дольше чувствовать сытость.',
+      summary: 'Демо-режим. Подключите API ключ для персонализированных отчётов.',
+      positives: ['Вы пользуетесь CalSnap!'],
+      improvements: ['Подключите ANTHROPIC_API_KEY'],
+      tip: 'Для полноценной работы ИИ-функций добавьте ключ Anthropic.',
     });
   }
 
-  return '';
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 1024,
+    system: 'Ты диетолог. Составь еженедельный отчёт. Верни ТОЛЬКО JSON.',
+    messages: [{
+      role: 'user',
+      content: `${userContext}\n\nСоставь еженедельный отчёт в формате JSON: { "summary": "...", "positives": ["..."], "improvements": ["..."], "tip": "..." }`,
+    }],
+  });
+
+  const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+  return text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 }
 
 export async function generateWorkoutPlanWithClaude(
-  _goal: string,
-  _activityLevel: string,
+  goal: string,
+  activityLevel: string,
 ): Promise<string> {
-  if (MOCK_MODE) {
+  if (!client) {
     return JSON.stringify({
       plan: [
-        {
-          day: 'Понедельник',
-          exercises: [
-            { name: 'Приседания', sets: 3, reps: 15, kcal_burn: 80 },
-            { name: 'Отжимания', sets: 3, reps: 12, kcal_burn: 60 },
-            { name: 'Планка', sets: 3, reps: 45, kcal_burn: 40 },
-          ],
-        },
-        {
-          day: 'Среда',
-          exercises: [
-            { name: 'Выпады', sets: 3, reps: 12, kcal_burn: 70 },
-            { name: 'Берпи', sets: 3, reps: 10, kcal_burn: 90 },
-            { name: 'Скручивания', sets: 3, reps: 20, kcal_burn: 50 },
-          ],
-        },
-        {
-          day: 'Пятница',
-          exercises: [
-            { name: 'Становая тяга', sets: 3, reps: 10, kcal_burn: 100 },
-            { name: 'Подтягивания', sets: 3, reps: 8, kcal_burn: 70 },
-            { name: 'Велосипед (пресс)', sets: 3, reps: 20, kcal_burn: 50 },
-          ],
-        },
+        { day: 'Понедельник', exercises: [{ name: 'Приседания', sets: 3, reps: 15, kcal_burn: 80 }, { name: 'Отжимания', sets: 3, reps: 12, kcal_burn: 60 }, { name: 'Планка', sets: 3, reps: 45, kcal_burn: 40 }] },
+        { day: 'Среда', exercises: [{ name: 'Выпады', sets: 3, reps: 12, kcal_burn: 70 }, { name: 'Берпи', sets: 3, reps: 10, kcal_burn: 90 }, { name: 'Скручивания', sets: 3, reps: 20, kcal_burn: 50 }] },
+        { day: 'Пятница', exercises: [{ name: 'Становая тяга', sets: 3, reps: 10, kcal_burn: 100 }, { name: 'Подтягивания', sets: 3, reps: 8, kcal_burn: 70 }, { name: 'Велосипед (пресс)', sets: 3, reps: 20, kcal_burn: 50 }] },
       ],
     });
   }
 
-  return '';
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 2048,
+    system: 'Ты фитнес-тренер. Составь план тренировок. Верни ТОЛЬКО JSON.',
+    messages: [{
+      role: 'user',
+      content: `Цель: ${goal}. Активность: ${activityLevel}.\n\nСоставь план на 3 дня. JSON: { "plan": [{ "day": "...", "exercises": [{ "name": "...", "sets": N, "reps": N, "kcal_burn": N }] }] }`,
+    }],
+  });
+
+  const text = response.content[0].type === 'text' ? response.content[0].text : '{}';
+  return text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 }

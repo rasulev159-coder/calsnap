@@ -12,6 +12,7 @@
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@calsnap/shared": "workspace:*",
     "@prisma/client": "^5.7.0",
     "bcryptjs": "^2.4.3",
