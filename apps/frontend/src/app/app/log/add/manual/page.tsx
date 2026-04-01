@@ -7,6 +7,13 @@ import { useAddFoodLog, useFoodSearch } from '@/hooks/useApi';
 import { today } from '@/lib/utils';
 import { MEAL_TYPES, MEAL_TYPE_LABELS, type MealType } from '@calsnap/shared';
 
+interface BasePer100 {
+  calories: number;
+  proteinG: number;
+  fatG: number;
+  carbsG: number;
+}
+
 export default function ManualAddPage() {
   const router = useRouter();
   const addMutation = useAddFoodLog();
@@ -14,17 +21,22 @@ export default function ManualAddPage() {
 
   const [search, setSearch] = useState('');
   const [mealType, setMealType] = useState<MealType>('lunch');
-  const [form, setForm] = useState({
-    foodName: '',
-    calories: 0,
-    proteinG: 0,
-    fatG: 0,
-    carbsG: 0,
-    portionG: 100,
-  });
+  const [foodName, setFoodName] = useState('');
+  const [portionG, setPortionG] = useState(100);
+  // Base values per 100g — used to recalculate when portion changes
+  const [base, setBase] = useState<BasePer100>({ calories: 0, proteinG: 0, fatG: 0, carbsG: 0 });
+  // Manual mode: user entered custom KBJU (not from search)
+  const [manualMode, setManualMode] = useState(true);
+  const [manualValues, setManualValues] = useState({ calories: 0, proteinG: 0, fatG: 0, carbsG: 0 });
 
-  const update = (field: string, value: any) =>
-    setForm((prev) => ({ ...prev, [field]: value }));
+  const scaled = manualMode
+    ? manualValues
+    : {
+        calories: Math.round(base.calories * portionG / 100),
+        proteinG: Math.round(base.proteinG * portionG / 100),
+        fatG: Math.round(base.fatG * portionG / 100),
+        carbsG: Math.round(base.carbsG * portionG / 100),
+      };
 
   const handleSearch = async () => {
     if (!search.trim()) return;
@@ -32,24 +44,41 @@ export default function ManualAddPage() {
   };
 
   const selectFood = (food: any) => {
-    setForm({
-      foodName: food.name,
+    setFoodName(food.name);
+    setPortionG(food.portionG || 100);
+    setBase({
       calories: food.calories,
       proteinG: food.proteinG,
       fatG: food.fatG,
       carbsG: food.carbsG,
-      portionG: food.portionG || 100,
     });
+    setManualMode(false);
     setSearch('');
   };
 
+  const handlePortionChange = (newPortion: number) => {
+    setPortionG(newPortion);
+    if (manualMode) {
+      // In manual mode, also scale proportionally from current values
+      const ratio = portionG > 0 ? newPortion / portionG : 1;
+      setManualValues({
+        calories: Math.round(manualValues.calories * ratio),
+        proteinG: Math.round(manualValues.proteinG * ratio),
+        fatG: Math.round(manualValues.fatG * ratio),
+        carbsG: Math.round(manualValues.carbsG * ratio),
+      });
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!form.foodName) return;
+    if (!foodName) return;
     await addMutation.mutateAsync({
       date: today(),
       mealType,
       source: 'manual',
-      ...form,
+      foodName,
+      portionG,
+      ...scaled,
     });
     router.push('/app/today');
   };
@@ -93,7 +122,7 @@ export default function ManualAddPage() {
                 >
                   <div className="font-medium">{food.name}</div>
                   <div className="text-xs text-gray-400">
-                    {food.calories} ккал · Б:{food.proteinG} Ж:{food.fatG} У:{food.carbsG}
+                    {food.calories} ккал/100г · Б:{food.proteinG} Ж:{food.fatG} У:{food.carbsG}
                   </div>
                 </button>
               ))
@@ -128,28 +157,34 @@ export default function ManualAddPage() {
           <label className="mb-1 block text-sm font-medium">Название блюда</label>
           <input
             type="text"
-            value={form.foodName}
-            onChange={(e) => update('foodName', e.target.value)}
+            value={foodName}
+            onChange={(e) => { setFoodName(e.target.value); setManualMode(true); }}
             className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             placeholder="Например: Куриная грудка с рисом"
           />
         </div>
+
+        {/* Portion with auto-recalc indicator */}
+        <div>
+          <label className="mb-1 flex justify-between text-sm font-medium">
+            <span>Порция (г)</span>
+            {!manualMode && <span className="text-xs text-primary font-normal">КБЖУ пересчитываются автоматически</span>}
+          </label>
+          <input
+            type="number"
+            value={portionG}
+            onChange={(e) => handlePortionChange(+e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-500">Калории</label>
             <input
               type="number"
-              value={form.calories}
-              onChange={(e) => update('calories', +e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-500">Порция (г)</label>
-            <input
-              type="number"
-              value={form.portionG}
-              onChange={(e) => update('portionG', +e.target.value)}
+              value={scaled.calories}
+              onChange={(e) => { setManualMode(true); setManualValues({ ...manualValues, calories: +e.target.value }); }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
@@ -159,8 +194,8 @@ export default function ManualAddPage() {
             <label className="mb-1 block text-xs font-medium text-gray-500">Белки (г)</label>
             <input
               type="number"
-              value={form.proteinG}
-              onChange={(e) => update('proteinG', +e.target.value)}
+              value={scaled.proteinG}
+              onChange={(e) => { setManualMode(true); setManualValues({ ...manualValues, proteinG: +e.target.value }); }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
@@ -168,8 +203,8 @@ export default function ManualAddPage() {
             <label className="mb-1 block text-xs font-medium text-gray-500">Жиры (г)</label>
             <input
               type="number"
-              value={form.fatG}
-              onChange={(e) => update('fatG', +e.target.value)}
+              value={scaled.fatG}
+              onChange={(e) => { setManualMode(true); setManualValues({ ...manualValues, fatG: +e.target.value }); }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
@@ -177,8 +212,8 @@ export default function ManualAddPage() {
             <label className="mb-1 block text-xs font-medium text-gray-500">Углеводы (г)</label>
             <input
               type="number"
-              value={form.carbsG}
-              onChange={(e) => update('carbsG', +e.target.value)}
+              value={scaled.carbsG}
+              onChange={(e) => { setManualMode(true); setManualValues({ ...manualValues, carbsG: +e.target.value }); }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             />
           </div>
@@ -187,7 +222,7 @@ export default function ManualAddPage() {
 
       <button
         onClick={handleSubmit}
-        disabled={!form.foodName || addMutation.isPending}
+        disabled={!foodName || addMutation.isPending}
         className="mt-6 w-full rounded-xl bg-primary py-3 text-sm font-semibold text-white shadow hover:bg-primary-dark transition disabled:opacity-50"
       >
         {addMutation.isPending ? 'Добавление...' : 'Добавить в дневник'}
